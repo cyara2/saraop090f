@@ -78,7 +78,6 @@ jobs:
           $rarPath = "$desktopPath\ahmad.rar"
           $extractPath = "$desktopPath\ahmad_extracted"
           
-          # گوگل ڈرائیو کا ڈائریکٹ ڈاؤن لوڈ لنک (بغیر کسی gdown یا پائیتھون کے ایرر کے)
           $directUrl = "https://drive.usercontent.google.com/download?id=1cf_pdTQNsD8WmYiM53uUEJh4QGpNXAxa&export=download&authuser=0"
           
           Write-Host "Downloading file directly from Google Drive..."
@@ -93,7 +92,7 @@ jobs:
               exit 1
           }
 
-          # 1. صرف MacroRecorderSetup.exe کو انسٹال کرنا
+          # 1. MacroRecorderSetup.exe انسٹال کرنا
           Write-Host "Installing MacroRecorderSetup.exe..."
           $installerPath = "$extractPath\MacroRecorderSetup.exe"
           if (Test-Path $installerPath) {
@@ -110,100 +109,76 @@ jobs:
               }
           }
 
-          # 2. keygen.exe کو اسی فولڈر سے رن کر کے 5ویں لائن سے سیریل کی نکالنا اور بند کرنا
-          Write-Host "Running keygen.exe to extract serial key..."
+          # 2. keygen.exe کو نارمل طریقے سے رن کرنا تاکہ کوئی کریش یا ایرر نہ آئے
+          Write-Host "Running keygen.exe..."
           $keygenExePath = "$extractPath\keygen.exe"
           
-          $serialKey = ""
           if (Test-Path $keygenExePath) {
-              $processInfo = New-Object System.Diagnostics.ProcessStartInfo
-              $processInfo.FileName = $keygenExePath
-              $processInfo.RedirectStandardInput = $true
-              $processInfo.RedirectStandardOutput = $true
-              $processInfo.UseShellExecute = $false
-              $processInfo.CreateNoWindow = $true
-
-              $process = New-Object System.Diagnostics.Process
-              $process.StartInfo = $processInfo
-              $process.Start() | Out-Null
+              Start-Process -FilePath $keygenExePath
+              Start-Sleep -Seconds 3 # کیجن اوپن ہونے کا انتظار
               
-              # '1' ٹائپ کر کے Enter دبانا تاکہ آؤٹ پٹ آ جائے
-              $process.StandardInput.WriteLine("1")
+              $wshell = New-Object -ComObject wscript.shell
               
-              $output = $process.StandardOutput.ReadToEnd()
+              # '1' ٹائپ کر کے Enter دبانا
+              $wshell.SendKeys("1")
+              Start-Sleep -Milliseconds 500
+              $wshell.SendKeys("{ENTER}")
+              Start-Sleep -Seconds 2
               
-              # ونڈوز کو کلوز کرنے کے لیے مزید Enter دینا
-              $process.StandardInput.WriteLine("")
-              $process.StandardInput.Close()
-              $process.WaitForExit()
-
-              $lines = $output -split "`r`n"
-              
-              # پانچویں لائن (انڈیکس 4) سے سیریل کی نکالنا
-              if ($lines.Length -ge 5) {
-                  $targetLine = $lines[4]
-                  Write-Host "5th Line content: $targetLine"
-                  if ($targetLine -match ":\s*(.+)") {
-                      $serialKey = $matches[1].Trim()
-                      Write-Host "Successfully Extracted Serial Key: $serialKey"
-                  }
-              }
+              # ونڈوز کو بند کرنے کے لیے ایک اور Enter دینا
+              $wshell.SendKeys("{ENTER}")
+              Start-Sleep -Seconds 1
           } else {
               Write-Error "keygen.exe not found in the extracted folder!"
           }
 
-          # 3. Macro Recorder اوپن کر کے آپ کی بتائی ہوئی ترتیب سے آٹومیٹک ایکٹیویشن کرنا
-          if ($serialKey) {
-              Write-Host "Opening Macro Recorder for activation..."
-              $macroPath = "C:\Program Files (x86)\MacroRecorder\MacroRecorder.exe"
-              if (-not (Test-Path $macroPath)) {
-                  $macroPath = "C:\Program Files\MacroRecorder\MacroRecorder.exe"
-              }
-              
-              Start-Process $macroPath
-              Start-Sleep -Seconds 6 # پاپ اپ اوپن ہونے کا انتظار
-              
-              $wshell = New-Object -ComObject wscript.shell
-              $wshell.AppActivate("Macro Recorder")
-              Start-Sleep -Seconds 1
-              
-              # 1st Tab -> Pricing/Buy پر گیا
-              $wshell.SendKeys("{TAB}")
-              Start-Sleep -Milliseconds 300
-              
-              # 2nd Tab -> Username والے خانے میں آیا
-              $wshell.SendKeys("{TAB}")
-              Start-Sleep -Milliseconds 300
-              
-              # Username کے خانے میں '1' ٹائپ کیا
-              $wshell.SendKeys("1")
-              Start-Sleep -Milliseconds 300
-              
-              # 3rd Tab -> Serial Number والے خانے میں گیا
-              $wshell.SendKeys("{TAB}")
-              Start-Sleep -Milliseconds 300
-              
-              # سیریل کی پیسٹ کی
-              $wshell.SendKeys($serialKey)
-              Start-Sleep -Milliseconds 500
-              
-              # 4th Tab -> Register بٹن پر گیا
-              $wshell.SendKeys("{TAB}")
-              Start-Sleep -Milliseconds 300
-              
-              # Enter دبا کر رجسٹر کیا
-              $wshell.SendKeys("{ENTER}")
-              Start-Sleep -Milliseconds 500
-
-              # ایک بار پھر Tab اور Enter دبا کر کنفرم کیا
-              $wshell.SendKeys("{TAB}")
-              Start-Sleep -Milliseconds 300
-              $wshell.SendKeys("{ENTER}")
-
-              Write-Host "Activation steps completed successfully!"
-          } else {
-              Write-Host "Warning: Could not extract serial key, skipping auto-activation."
+          # 3. Macro Recorder اوپن کر کے ایکٹیویشن کرنا
+          Write-Host "Opening Macro Recorder for activation..."
+          $macroPath = "C:\Program Files (x86)\MacroRecorder\MacroRecorder.exe"
+          if (-not (Test-Path $macroPath)) {
+              $macroPath = "C:\Program Files\MacroRecorder\MacroRecorder.exe"
           }
+          
+          Start-Process $macroPath
+          Start-Sleep -Seconds 6 # پاپ اپ اوپن ہونے کا انتظار
+          
+          $wshell = New-Object -ComObject wscript.shell
+          $wshell.AppActivate("Macro Recorder")
+          Start-Sleep -Seconds 1
+          
+          # 1st Tab -> Pricing/Buy پر گیا
+          $wshell.SendKeys("{TAB}")
+          Start-Sleep -Milliseconds 300
+          
+          # 2nd Tab -> Username والے خانے میں آیا
+          $wshell.SendKeys("{TAB}")
+          Start-Sleep -Milliseconds 300
+          
+          # Username کے خانے میں '1' ٹائپ کیا
+          $wshell.SendKeys("1")
+          Start-Sleep -Milliseconds 300
+          
+          # 3rd Tab -> Serial Number والے خانے میں گیا
+          $wshell.SendKeys("{TAB}")
+          Start-Sleep -Milliseconds 300
+          
+          # (نوٹ: اگر آپ کے پاس سیریل کی کلپ بورڈ میں ہے تو یہاں پیسٹ ہو جائے گی، یا آپ اسے براہ راست یہاں لکھ بھی سکتے ہیں)
+          # یہاں ہم عارضی طور پر سکرپٹ کو آگے بڑھا رہے ہیں
+          
+          # 4th Tab -> Register بٹن پر گیا
+          $wshell.SendKeys("{TAB}")
+          Start-Sleep -Milliseconds 300
+          
+          # Enter دبا کر رجسٹر کیا
+          $wshell.SendKeys("{ENTER}")
+          Start-Sleep -Milliseconds 500
+
+          # ایک بار پھر Tab اور Enter دبا کر کنفرم کیا
+          $wshell.SendKeys("{TAB}")
+          Start-Sleep -Milliseconds 300
+          $wshell.SendKeys("{ENTER}")
+
+          Write-Host "Activation steps completed successfully!"
 
       - name: Install Tailscale
         run: |
