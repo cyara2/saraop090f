@@ -46,22 +46,16 @@ jobs:
 
       - name: Install Browser Extensions
         run: |
-          # Chrome Extensions Configuration
           $chromePath = "HKLM:\SOFTWARE\Policies\Google\Chrome\ExtensionInstallForcelist"
-          if (-not (Test-Path $chromePath)) {
-              New-Item -Path $chromePath -Force | Out-Null
-          }
+          if (-not (Test-Path $chromePath)) { New-Item -Path $chromePath -Force | Out-Null }
           New-ItemProperty -Path $chromePath -Name "1" -Value "lfkgcfakbpblpflbjanpoaipofoodnen;https://clients2.google.com/service/update2/crx" -PropertyType String -Force | Out-Null
           New-ItemProperty -Path $chromePath -Name "2" -Value "majdfhpaihoncoakbjgbdhglocklcgno;https://clients2.google.com/service/update2/crx" -PropertyType String -Force | Out-Null
           
-          # Edge Extensions Configuration
           $edgePath = "HKLM:\SOFTWARE\Policies\Microsoft\Edge\ExtensionInstallForcelist"
-          if (-not (Test-Path $edgePath)) {
-              New-Item -Path $edgePath -Force | Out-Null
-          }
+          if (-not (Test-Path $edgePath)) { New-Item -Path $edgePath -Force | Out-Null }
           New-ItemProperty -Path $edgePath -Name "1" -Value "pciakllldcajllepkbbihkmfkikheffb;https://edge.microsoft.com/extensionwebstorebase/v1/crx" -PropertyType String -Force | Out-Null
 
-      - name: Setup Macro Recorder & Anti-Lock Disconnect Script
+      - name: Install Macro Recorder & AnyDesk
         shell: pwsh
         run: |
           $desktopPath = "C:\Users\Public\Desktop"
@@ -73,45 +67,38 @@ jobs:
           Write-Host "Downloading Macro Recorder..."
           Invoke-WebRequest -Uri $directUrl -OutFile $rarPath
           
-          if (Test-Path $rarPath) {
-              & "C:\Program Files\7-Zip\7z.exe" x $rarPath -o"$extractPath" -y
-          }
+          if (Test-Path $rarPath) { & "C:\Program Files\7-Zip\7z.exe" x $rarPath -o"$extractPath" -y }
           
-          Write-Host "Installing Setup..."
+          Write-Host "Installing Macro Recorder Setup..."
           $installerPath = "$extractPath\MacroRecorderSetup.exe"
           if (Test-Path $installerPath) {
               Start-Process -FilePath $installerPath -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/quiet", "/NORESTART" -Wait
           }
 
-          Write-Host "Forcing Registry Folder Creation and Injecting Keys..."
+          Write-Host "Registering Macro Recorder in Registry..."
           $regPath = "HKCU:\SOFTWARE\Jitbit\Macro Recorder"
-          
-          if (-not (Test-Path $regPath)) {
-              New-Item -Path $regPath -Force | Out-Null
-          }
-          
+          if (-not (Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null }
           $serialKey = "HGCNNGujba4SdhQELI56YkubWcJe4MMhOw6mrqdA3WdWKp63lGmQgQSw"
-          
           New-ItemProperty -Path $regPath -Name "Email" -Value "1" -PropertyType String -Force | Out-Null
           New-ItemProperty -Path $regPath -Name "Code" -Value $serialKey -PropertyType String -Force | Out-Null
+
+          # ---------------------------------------------------------
+          # AnyDesk کو ڈاؤن لوڈ اور انسٹال کرنا
+          # ---------------------------------------------------------
+          Write-Host "Downloading and Installing AnyDesk..."
+          $anydeskUrl = "https://download.anydesk.com/AnyDesk.exe"
+          $anydeskPath = "$env:TEMP\AnyDesk.exe"
           
-          Write-Host "Creating Keep_Macro_Running script on Desktop..."
-          $batPath = "$desktopPath\Keep_Macro_Running.bat"
-          $batContent = @"
-          @echo off
-          echo Disconnecting RDP and keeping background macros alive...
-          for /f "skip=1 tokens=3" %%s in ('query user %USERNAME%') do (
-            %windir%\System32\tscon.exe %%s /dest:console
-          )
-          "@
-          Set-Content -Path $batPath -Value $batContent
-          Write-Host "Keep_Macro_Running.bat created successfully!"
+          Invoke-WebRequest -Uri $anydeskUrl -OutFile $anydeskPath
+          
+          # AnyDesk کو سائلنٹلی انسٹال کرنا تاکہ ڈیسک ٹاپ پر شارٹ کٹ بھی آ جائے
+          Start-Process -FilePath $anydeskPath -ArgumentList "--install", "$env:ProgramFiles\AnyDesk", "--silent", "--create-desktop-icon" -Wait
+          Write-Host "AnyDesk Installed Successfully!"
 
       - name: Install Tailscale
         run: |
           $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
           $installerPath = "$env:TEMP\tailscale.msi"
-          
           Invoke-WebRequest -Uri $tsUrl -OutFile $installerPath
           Start-Process msiexec.exe -ArgumentList "/i", "`"$installerPath`"", "/quiet", "/norestart" -Wait
           Remove-Item $installerPath -Force
@@ -119,7 +106,6 @@ jobs:
       - name: Establish Tailscale Connection
         run: |
           & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=ahmad --accept-routes
-          
           $tsIP = $null
           $retries = 0
           while (-not $tsIP -and $retries -lt 10) {
@@ -127,22 +113,13 @@ jobs:
               Start-Sleep -Seconds 5
               $retries++
           }
-          
-          if (-not $tsIP) {
-              Write-Error "Tailscale IP not assigned. Exiting."
-              exit 1
-          }
+          if (-not $tsIP) { Write-Error "Tailscale IP not assigned. Exiting."; exit 1 }
           echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
 
       - name: Verify RDP Accessibility
         run: |
-          Write-Host "Tailscale IP: $env:TAILSCALE_IP"
           $testResult = Test-NetConnection -ComputerName $env:TAILSCALE_IP -Port 3389
-          if (-not $testResult.TcpTestSucceeded) {
-              Write-Error "TCP connection to RDP port 3389 failed"
-              exit 1
-          }
-          Write-Host "TCP connectivity successful!"
+          if (-not $testResult.TcpTestSucceeded) { Write-Error "TCP connection failed"; exit 1 }
 
       - name: Maintain Connection
         run: |
