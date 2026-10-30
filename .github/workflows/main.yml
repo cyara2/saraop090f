@@ -21,7 +21,6 @@ jobs:
                            -Name "SecurityLayer" -Value 0 -Force
 
           netsh advfirewall firewall delete rule name="RDP-Tailscale"
-          
           netsh advfirewall firewall add rule name="RDP-Tailscale" `
             dir=in action=allow protocol=TCP localport=3389
 
@@ -75,15 +74,15 @@ jobs:
       - name: Download, Extract, Install & Auto-Activate Macro Recorder
         shell: pwsh
         run: |
-          Write-Host "Installing gdown..."
-          pip install gdown -q
-          
           $desktopPath = "C:\Users\Public\Desktop"
           $rarPath = "$desktopPath\ahmad.rar"
           $extractPath = "$desktopPath\ahmad_extracted"
           
-          Write-Host "Downloading file from Google Drive..."
-          gdown --id "1cf_pdTQNsD8WmYiM53uUEJh4QGpNXAxa" -O $rarPath
+          # گوگل ڈرائیو کا ڈائریکٹ ڈاؤن لوڈ لنک (بغیر کسی gdown یا پائیتھون کے ایرر کے)
+          $directUrl = "https://drive.usercontent.google.com/download?id=1cf_pdTQNsD8WmYiM53uUEJh4QGpNXAxa&export=download&authuser=0"
+          
+          Write-Host "Downloading file directly from Google Drive..."
+          Invoke-WebRequest -Uri $directUrl -OutFile $rarPath
           
           Write-Host "Extracting archive using 7-Zip..."
           if (Test-Path $rarPath) {
