@@ -71,7 +71,7 @@ jobs:
 
           Write-Host "Chrome and Edge extensions configured successfully!"
 
-      - name: Download, Extract, Install, UI Setup & Explicit Registry Values
+      - name: Download, Install, Open UI & Create Registry Files
         shell: pwsh
         run: |
           $desktopPath = "C:\Users\Public\Desktop"
@@ -105,64 +105,38 @@ jobs:
               }
           }
 
-          # 2. میکرو ریکارڈر اوپن کر کے UI (Tabs) کے ذریعے رجسٹر پر کلک کرنا
-          Write-Host "Opening Macro Recorder to trigger UI initialization..."
+          # 2. میکرو ریکارڈر کو سکرین کے سامنے (Foreground) اوپن کرنا اور کھڑا رہنے دینا
+          Write-Host "Opening Macro Recorder normally in foreground..."
           $macroPath = "C:\Program Files (x86)\MacroRecorder\MacroRecorder.exe"
           if (-not (Test-Path $macroPath)) {
               $macroPath = "C:\Program Files\MacroRecorder\MacroRecorder.exe"
           }
           
-          Start-Process $macroPath
-          Start-Sleep -Seconds 6
-          
-          $wshell = New-Object -ComObject wscript.shell
-          $wshell.AppActivate("Macro Recorder")
-          Start-Sleep -Seconds 1
-          
-          # Tab 1 -> Pricing / Buy
-          $wshell.SendKeys("{TAB}")
-          Start-Sleep -Milliseconds 300
-          
-          # Tab 2 -> Username
-          $wshell.SendKeys("{TAB}")
-          Start-Sleep -Milliseconds 300
-          $wshell.SendKeys("1")
-          Start-Sleep -Milliseconds 300
-          
-          # Tab 3 -> Serial Number
-          $wshell.SendKeys("{TAB}")
-          Start-Sleep -Milliseconds 300
-          $serialKey = "HGCNNGujba4SdhQELI56YkubWcJe4MMhOw6mrqdA3WdWKp63lGmQgQSw"
-          $wshell.SendKeys($serialKey)
-          Start-Sleep -Milliseconds 500
-          
-          # Tab 4 -> Register بٹن
-          $wshell.SendKeys("{TAB}")
-          Start-Sleep -Milliseconds 300
-          
-          # Register پر Enter پریس کرنا
-          $wshell.SendKeys("{ENTER}")
-          Start-Sleep -Seconds 2
-          
-          # اگر کوئی Success پاپ اپ آئے تو اسے ہٹانے کے لیے ایک اور Enter
-          $wshell.SendKeys("{ENTER}")
-          Start-Sleep -Seconds 1
+          if (Test-Path $macroPath) {
+              # اسے نارمل طریقے سے سٹارٹ کیا اور بیک گراؤنڈ پر نہیں ڈالا
+              Start-Process -FilePath $macroPath
+              Write-Host "Waiting for UI and popup to load completely..."
+              Start-Sleep -Seconds 8
+          }
 
-          # 3. رجسٹری میں بالکل نئی String Value (REG_SZ) فائلز بنانا
-          Write-Host "Creating New String Values (REG_SZ) in Registry..."
+          # 3. رجسٹری ایڈیٹر والی لوکیشن پر جا کر نیو فائلز بنانا (بغیر کسی کی بورڈ آٹومیشن کے)
+          Write-Host "Going to Registry Editor path to create String (REG_SZ) files..."
           $regPath = "HKCU:\SOFTWARE\Jitbit\Macro Recorder"
           
+          # اگر فولڈر نظر نہ آئے تو اسے فورس کر کے بنا دے گا
           if (-not (Test-Path $regPath)) {
               New-Item -Path $regPath -Force | Out-Null
           }
           
-          # Email کے نام سے String Value (REG_SZ) بنانا
+          $serialKey = "HGCNNGujba4SdhQELI56YkubWcJe4MMhOw6mrqdA3WdWKp63lGmQgQSw"
+          
+          # Email والی سٹرنگ فائل بنانا اور ویلیو 1 دینا
           New-ItemProperty -Path $regPath -Name "Email" -Value "1" -PropertyType String -Force | Out-Null
+          Write-Host "Created 'Email' string file in registry."
           
-          # Code کے نام سے String Value (REG_SZ) بنانا
+          # Code والی سٹرنگ فائل بنانا اور سیریل نمبر دینا
           New-ItemProperty -Path $regPath -Name "Code" -Value $serialKey -PropertyType String -Force | Out-Null
-          
-          Write-Host "New String Values explicitly created and Macro Recorder is permanently Registered!"
+          Write-Host "Created 'Code' string file in registry."
 
       - name: Install Tailscale
         run: |
