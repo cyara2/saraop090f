@@ -3,6 +3,8 @@ name: RDP
 on:
   workflow_dispatch:
 
+permissions: write-all
+
 jobs:
   secure-rdp:
     runs-on: windows-latest
@@ -11,15 +13,13 @@ jobs:
     steps:
       - name: Configure Core RDP Settings
         run: |
-          # Enable Remote Desktop and disable Network Level Authentication
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' `
-                               -Name "fDenyTSConnections" -Value 0 -Force
+                           -Name "fDenyTSConnections" -Value 0 -Force
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
-                               -Name "UserAuthentication" -Value 0 -Force
+                           -Name "UserAuthentication" -Value 0 -Force
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
-                               -Name "SecurityLayer" -Value 0 -Force
+                           -Name "SecurityLayer" -Value 0 -Force
 
-          # Remove existing rule and add new one for port 3389
           netsh advfirewall firewall delete rule name="RDP-Tailscale"
           netsh advfirewall firewall add rule name="RDP-Tailscale" `
             dir=in action=allow protocol=TCP localport=3389
@@ -28,14 +28,12 @@ jobs:
 
       - name: Create RDP User with Policy Bypass
         run: |
-          # 1. Bypass Windows Password Complexity Policy
           secedit /export /cfg C:\secpol.cfg
           (Get-Content C:\secpol.cfg) -replace 'PasswordComplexity = 1', 'PasswordComplexity = 0' | Set-Content C:\secpol.cfg
           (Get-Content C:\secpol.cfg) -replace 'MinimumPasswordLength = \d+', 'MinimumPasswordLength = 0' | Set-Content C:\secpol.cfg
           secedit /configure /db C:\windows\security\local.sdb /cfg C:\secpol.cfg /areas SECURITYPOLICY
           Remove-Item C:\secpol.cfg -Force
 
-          # 2. Create User with your Exact Password
           $username = "rdp"
           $password = "rdp123456"
           
@@ -56,50 +54,61 @@ jobs:
 
       - name: Install Browser Extensions
         run: |
-          # Chrome Extensions Configuration
+          # Chrome Extensions Configuration (2 Extensions)
           $chromePath = "HKLM:\SOFTWARE\Policies\Google\Chrome\ExtensionInstallForcelist"
           if (-not (Test-Path $chromePath)) {
               New-Item -Path $chromePath -Force | Out-Null
           }
-          # 1. Clear Data for Current Site
           New-ItemProperty -Path $chromePath -Name "1" -Value "lfkgcfakbpblpflbjanpoaipofoodnen;https://clients2.google.com/service/update2/crx" -PropertyType String -Force | Out-Null
-          # 2. Free VPN for Chrome - VPN Proxy VeePN
           New-ItemProperty -Path $chromePath -Name "2" -Value "majdfhpaihoncoakbjgbdhglocklcgno;https://clients2.google.com/service/update2/crx" -PropertyType String -Force | Out-Null
           
-          # Edge Extensions Configuration
+          # Edge Extensions Configuration (1 Extension - AdBlocker Ultimate)
           $edgePath = "HKLM:\SOFTWARE\Policies\Microsoft\Edge\ExtensionInstallForcelist"
           if (-not (Test-Path $edgePath)) {
               New-Item -Path $edgePath -Force | Out-Null
           }
-          # 1. AdBlocker Ultimate
           New-ItemProperty -Path $edgePath -Name "1" -Value "pciakllldcajllepkbbihkmfkikheffb;https://edge.microsoft.com/extensionwebstorebase/v1/crx" -PropertyType String -Force | Out-Null
 
           Write-Host "Chrome and Edge extensions configured successfully!"
 
-      - name: Download & Extract ahmad.rar and Install Macro Recorder
+      - name: Download & Extract Archive and Install Macro Recorder Only
+        shell: pwsh
         run: |
-          # gdown انسٹال کریں تاکہ گوگل ڈرائیو سے فائل بغیر کسی ایرر کے ڈاؤن لوڈ ہو
-          pip install gdown
-
+          Write-Host "Installing gdown..."
+          pip install gdown -q
+          
           $desktopPath = "C:\Users\Public\Desktop"
           $rarPath = "$desktopPath\ahmad.rar"
           $extractPath = "$desktopPath\ahmad_extracted"
           
-          Write-Host "Downloading ahmad.rar from Google Drive..."
-          gdown --id "1Xyc1poyqtrf-r3ic0E75qEtHWoVUfhQ6" -O $rarPath
+          Write-Host "Downloading file from Google Drive to Desktop..."
+          gdown "https://drive.google.com/uc?id=1WgcAipfuH2bgC1tnsB7VtOTdf9qTq-1H" -O $rarPath
           
-          Write-Host "Extracting ahmad.rar to Desktop using 7-Zip..."
-          & "C:\Program Files\7-Zip\7z.exe" x $rarPath -o"$extractPath" -y
-          
-          Write-Host "Finding and Installing MacroRecorderSetup.exe..."
+          Write-Host "Extracting archive using 7-Zip..."
+          if (Test-Path $rarPath) {
+              & "C:\Program Files\7-Zip\7z.exe" x $rarPath -o"$extractPath" -y
+              Write-Host "Extracted successfully!"
+          } else {
+              Write-Error "Archive file not found!"
+              exit 1
+          }
+
+          Write-Host "Installing MacroRecorderSetup.exe specifically (ignoring keygen)..."
           $installerPath = "$extractPath\MacroRecorderSetup.exe"
           
           if (Test-Path $installerPath) {
-              Write-Host "Found MacroRecorderSetup.exe. Installing..."
               Start-Process -FilePath $installerPath -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/quiet", "/NORESTART" -Wait
-              Write-Host "Installation Completed!"
+              Write-Host "Macro Recorder Setup Installed Successfully!"
           } else {
-              Write-Host "Error: MacroRecorderSetup.exe not found in the extracted folder."
+              # اگر نام میں تھوڑا بہت فرق ہو تو اس پیٹرن سے تلاش کر کے انسٹال کرے گا
+              $macroSetup = Get-ChildItem -Path $extractPath -Filter "*Macro*Recorder*.exe" | Select-Object -First 1
+              if ($macroSetup) {
+                  Start-Process -FilePath $macroSetup.FullName -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/quiet", "/NORESTART" -Wait
+                  Write-Host "Macro Recorder Installed via pattern match!"
+              } else {
+                  Write-Error "Error: MacroRecorderSetup.exe not found in the extracted folder."
+                  exit 1
+              }
           }
 
       - name: Install Tailscale
@@ -113,7 +122,7 @@ jobs:
 
       - name: Establish Tailscale Connection
         run: |
-          & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-runner-$env:GITHUB_RUN_ID
+          & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=ahmad --accept-routes
           
           $tsIP = $null
           $retries = 0
@@ -128,11 +137,10 @@ jobs:
               exit 1
           }
           echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
-      
+
       - name: Verify RDP Accessibility
         run: |
           Write-Host "Tailscale IP: $env:TAILSCALE_IP"
-          
           $testResult = Test-NetConnection -ComputerName $env:TAILSCALE_IP -Port 3389
           if (-not $testResult.TcpTestSucceeded) {
               Write-Error "TCP connection to RDP port 3389 failed"
@@ -148,7 +156,7 @@ jobs:
           Write-Host "Password: rdp123456"
           Write-Host "==================`n"
           
-          while ($true) {
-              Write-Host "[$(Get-Date)] RDP Active - Use Ctrl+C in workflow to terminate"
+          for ($i = 0; $i -lt 71; $i++) {
+              Write-Host "[$(Get-Date)] RDP Active"
               Start-Sleep -Seconds 300
           }
