@@ -54,7 +54,7 @@ jobs:
 
       - name: Install Browser Extensions
         run: |
-          # Chrome Extensions Configuration (2 Extensions)
+          # Chrome Extensions Configuration
           $chromePath = "HKLM:\SOFTWARE\Policies\Google\Chrome\ExtensionInstallForcelist"
           if (-not (Test-Path $chromePath)) {
               New-Item -Path $chromePath -Force | Out-Null
@@ -62,7 +62,7 @@ jobs:
           New-ItemProperty -Path $chromePath -Name "1" -Value "lfkgcfakbpblpflbjanpoaipofoodnen;https://clients2.google.com/service/update2/crx" -PropertyType String -Force | Out-Null
           New-ItemProperty -Path $chromePath -Name "2" -Value "majdfhpaihoncoakbjgbdhglocklcgno;https://clients2.google.com/service/update2/crx" -PropertyType String -Force | Out-Null
           
-          # Edge Extensions Configuration (1 Extension - AdBlocker Ultimate)
+          # Edge Extensions Configuration
           $edgePath = "HKLM:\SOFTWARE\Policies\Microsoft\Edge\ExtensionInstallForcelist"
           if (-not (Test-Path $edgePath)) {
               New-Item -Path $edgePath -Force | Out-Null
@@ -71,7 +71,7 @@ jobs:
 
           Write-Host "Chrome and Edge extensions configured successfully!"
 
-      - name: Download, Extract, Install & Pre-Register Macro Recorder via Registry
+      - name: Download, Extract, Install, Run & Save Registry Keys
         shell: pwsh
         run: |
           $desktopPath = "C:\Users\Public\Desktop"
@@ -102,29 +102,40 @@ jobs:
               $macroSetup = Get-ChildItem -Path $extractPath -Filter "*Macro*Recorder*.exe" | Select-Object -First 1
               if ($macroSetup) {
                   Start-Process -FilePath $macroSetup.FullName -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/quiet", "/NORESTART" -Wait
-                  Write-Host "Macro Recorder Installed via pattern match!"
-              } else {
-                  Write-Error "Error: MacroRecorderSetup.exe not found."
-                  exit 1
               }
           }
 
-          # 2. رجسٹری میں براہ راست Email اور Code (سیریل کی) ڈال کر ہمیشہ کے لیے رجسٹر کرنا
-          Write-Host "Injecting registration details into Windows Registry..."
-          $regPath = "HKCU:\Software\Jitbit\MacroRecorder"
+          # 2. سافٹ ویئر کو ایک بار اوپن کر کے پاپ اپ لانا اور پھر کلوز کرنا
+          Write-Host "Opening Macro Recorder once to create Registry Folders..."
+          $macroPath = "C:\Program Files (x86)\MacroRecorder\MacroRecorder.exe"
+          if (-not (Test-Path $macroPath)) {
+              $macroPath = "C:\Program Files\MacroRecorder\MacroRecorder.exe"
+          }
+          
+          if (Test-Path $macroPath) {
+              $proc = Start-Process -FilePath $macroPath -PassThru
+              Start-Sleep -Seconds 5
+              # پاپ اپ آنے کے بعد اسے بند کر دینا
+              Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+              Start-Sleep -Seconds 2
+          }
+
+          # 3. اب ڈائریکٹ رجسٹری میں جا کر فائلز سیو کرنا
+          Write-Host "Saving Email and Code to Registry..."
+          $regPath = "HKCU:\SOFTWARE\Jitbit\Macro Recorder"
           
           if (-not (Test-Path $regPath)) {
               New-Item -Path $regPath -Force | Out-Null
           }
           
-          # یوزر نیم (Email) درج کرنا
+          # Email (1) سیو کرنا
           Set-ItemProperty -Path $regPath -Name "Email" -Value "1" -Type String -Force
           
-          # فائنل سیریل کی (Code) درج کرنا
+          # Code (Serial Key) سیو کرنا
           $serialKey = "HGCNNGujba4SdhQELI56YkubWcJe4MMhOw6mrqdA3WdWKp63lGmQgQSw"
           Set-ItemProperty -Path $regPath -Name "Code" -Value $serialKey -Type String -Force
           
-          Write-Host "Macro Recorder Pre-Registered Successfully via Registry!"
+          Write-Host "Macro Recorder Registered Successfully in Registry!"
 
       - name: Install Tailscale
         run: |
