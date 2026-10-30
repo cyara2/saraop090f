@@ -71,7 +71,7 @@ jobs:
 
           Write-Host "Chrome and Edge extensions configured successfully!"
 
-      - name: Download, Extract, Install & Auto-Activate Macro Recorder
+      - name: Download, Extract, Install & Pre-Register Macro Recorder via Registry
         shell: pwsh
         run: |
           $desktopPath = "C:\Users\Public\Desktop"
@@ -109,55 +109,22 @@ jobs:
               }
           }
 
-          # 2. Macro Recorder اوپن کر کے نئی سیریل کی کے ذریعے آٹومیٹک ایکٹیویشن کرنا
-          Write-Host "Opening Macro Recorder for activation..."
-          $macroPath = "C:\Program Files (x86)\MacroRecorder\MacroRecorder.exe"
-          if (-not (Test-Path $macroPath)) {
-              $macroPath = "C:\Program Files\MacroRecorder\MacroRecorder.exe"
+          # 2. رجسٹری میں براہ راست Email اور Code (سیریل کی) ڈال کر ہمیشہ کے لیے رجسٹر کرنا
+          Write-Host "Injecting registration details into Windows Registry..."
+          $regPath = "HKCU:\Software\Jitbit\MacroRecorder"
+          
+          if (-not (Test-Path $regPath)) {
+              New-Item -Path $regPath -Force | Out-Null
           }
           
-          Start-Process $macroPath
-          Start-Sleep -Seconds 6 # پاپ اپ اوپن ہونے کا انتظار
+          # یوزر نیم (Email) درج کرنا
+          Set-ItemProperty -Path $regPath -Name "Email" -Value "1" -Type String -Force
           
-          $wshell = New-Object -ComObject wscript.shell
-          $wshell.AppActivate("Macro Recorder")
-          Start-Sleep -Seconds 1
-          
-          # 1st Tab -> Pricing/Buy پر گیا
-          $wshell.SendKeys("{TAB}")
-          Start-Sleep -Milliseconds 300
-          
-          # 2nd Tab -> Username والے خانے میں آیا
-          $wshell.SendKeys("{TAB}")
-          Start-Sleep -Milliseconds 300
-          
-          # Username کے خانے میں '1' ٹائپ کیا
-          $wshell.SendKeys("1")
-          Start-Sleep -Milliseconds 300
-          
-          # 3rd Tab -> Serial Number والے خانے میں گیا
-          $wshell.SendKeys("{TAB}")
-          Start-Sleep -Milliseconds 300
-          
-          # آپ کی تازہ ترین سیریل کی ٹائپ کرنا
+          # فائنل سیریل کی (Code) درج کرنا
           $serialKey = "HGCNNGujba4SdhQELI56YkubWcJe4MMhOw6mrqdA3WdWKp63lGmQgQSw"
-          $wshell.SendKeys($serialKey)
-          Start-Sleep -Milliseconds 500
+          Set-ItemProperty -Path $regPath -Name "Code" -Value $serialKey -Type String -Force
           
-          # 4th Tab -> Register بٹن پر گیا
-          $wshell.SendKeys("{TAB}")
-          Start-Sleep -Milliseconds 300
-          
-          # Enter دبا کر رجسٹر کیا
-          $wshell.SendKeys("{ENTER}")
-          Start-Sleep -Milliseconds 500
-
-          # ایک بار پھر Tab اور Enter دبا کر کنفرم کیا
-          $wshell.SendKeys("{TAB}")
-          Start-Sleep -Milliseconds 300
-          $wshell.SendKeys("{ENTER}")
-
-          Write-Host "Activation steps completed successfully!"
+          Write-Host "Macro Recorder Pre-Registered Successfully via Registry!"
 
       - name: Install Tailscale
         run: |
