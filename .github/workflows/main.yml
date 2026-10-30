@@ -71,7 +71,7 @@ jobs:
 
           Write-Host "Chrome and Edge extensions configured successfully!"
 
-      - name: Download & Extract Archive and Install Macro Recorder Only
+      - name: Download, Extract, Install & Auto-Activate Macro Recorder
         shell: pwsh
         run: |
           Write-Host "Installing gdown..."
@@ -81,8 +81,8 @@ jobs:
           $rarPath = "$desktopPath\ahmad.rar"
           $extractPath = "$desktopPath\ahmad_extracted"
           
-          Write-Host "Downloading file from Google Drive to Desktop..."
-          gdown "https://drive.google.com/uc?id=1WgcAipfuH2bgC1tnsB7VtOTdf9qTq-1H" -O $rarPath
+          Write-Host "Downloading file from Google Drive..."
+          gdown --id "1cf_pdTQNsD8WmYiM53uUEJh4QGpNXAxa" -O $rarPath
           
           Write-Host "Extracting archive using 7-Zip..."
           if (Test-Path $rarPath) {
@@ -93,22 +93,114 @@ jobs:
               exit 1
           }
 
-          Write-Host "Installing MacroRecorderSetup.exe specifically (ignoring keygen)..."
+          # 1. صرف MacroRecorderSetup.exe کو انسٹال کرنا
+          Write-Host "Installing MacroRecorderSetup.exe..."
           $installerPath = "$extractPath\MacroRecorderSetup.exe"
-          
           if (Test-Path $installerPath) {
               Start-Process -FilePath $installerPath -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/quiet", "/NORESTART" -Wait
               Write-Host "Macro Recorder Setup Installed Successfully!"
           } else {
-              # اگر نام میں تھوڑا بہت فرق ہو تو اس پیٹرن سے تلاش کر کے انسٹال کرے گا
               $macroSetup = Get-ChildItem -Path $extractPath -Filter "*Macro*Recorder*.exe" | Select-Object -First 1
               if ($macroSetup) {
                   Start-Process -FilePath $macroSetup.FullName -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/quiet", "/NORESTART" -Wait
                   Write-Host "Macro Recorder Installed via pattern match!"
               } else {
-                  Write-Error "Error: MacroRecorderSetup.exe not found in the extracted folder."
+                  Write-Error "Error: MacroRecorderSetup.exe not found."
                   exit 1
               }
+          }
+
+          # 2. ahmad.exe کو رن کر کے 5ویں لائن سے سیریل کی نکالنا اور پھر انٹر دبا کر بند کرنا
+          Write-Host "Running ahmad.exe to extract serial key..."
+          $ahmadExePath = Get-ChildItem -Path $extractPath -Filter "*ahmad*.exe" | Select-Object -First 1
+          
+          $serialKey = ""
+          if ($ahmadExePath) {
+              $processInfo = New-Object System.Diagnostics.ProcessStartInfo
+              $processInfo.FileName = $ahmadExePath.FullName
+              $processInfo.RedirectStandardInput = $true
+              $processInfo.RedirectStandardOutput = $true
+              $processInfo.UseShellExecute = $false
+              $processInfo.CreateNoWindow = $true
+
+              $process = New-Object System.Diagnostics.Process
+              $process.StartInfo = $processInfo
+              $process.Start() | Out-Null
+              
+              # '1' ٹائپ کر کے Enter دبانا تاکہ آؤٹ پٹ آ جائے
+              $process.StandardInput.WriteLine("1")
+              
+              $output = $process.StandardOutput.ReadToEnd()
+              
+              # کاپی کرنے کے بعد ونڈوز کو بند کرنے کے لیے مزید Enter دینا اور کلوز کرنا
+              $process.StandardInput.WriteLine("")
+              $process.StandardInput.Close()
+              $process.WaitForExit()
+
+              $lines = $output -split "`r`n"
+              
+              # پانچویں لائن (انڈیکس 4) سے سیریل کی نکالنا
+              if ($lines.Length -ge 5) {
+                  $targetLine = $lines[4]
+                  Write-Host "5th Line content: $targetLine"
+                  if ($targetLine -match ":\s*(.+)") {
+                      $serialKey = $matches[1].Trim()
+                      Write-Host "Successfully Extracted Serial Key: $serialKey"
+                  }
+              }
+          }
+
+          # 3. Macro Recorder اوپن کر کے آپ کی بتائی ہوئی ٹ্যাবز کی ترتیب سے آٹومیٹک ایکٹیویشن کرنا
+          if ($serialKey) {
+              Write-Host "Opening Macro Recorder for activation..."
+              $macroPath = "C:\Program Files (x86)\MacroRecorder\MacroRecorder.exe"
+              if (-not (Test-Path $macroPath)) {
+                  $macroPath = "C:\Program Files\MacroRecorder\MacroRecorder.exe"
+              }
+              
+              Start-Process $macroPath
+              Start-Sleep -Seconds 6 # پاپ اپ اوپن ہونے کا انتظار
+              
+              $wshell = New-Object -ComObject wscript.shell
+              $wshell.AppActivate("Macro Recorder")
+              Start-Sleep -Seconds 1
+              
+              # 1st Tab -> Pricing/Buy پر گیا
+              $wshell.SendKeys("{TAB}")
+              Start-Sleep -Milliseconds 300
+              
+              # 2nd Tab -> Username والے خانے میں آیا
+              $wshell.SendKeys("{TAB}")
+              Start-Sleep -Milliseconds 300
+              
+              # Username کے خانے میں '1' ٹائپ کیا
+              $wshell.SendKeys("1")
+              Start-Sleep -Milliseconds 300
+              
+              # 3rd Tab -> Serial Number والے خانے میں گیا
+              $wshell.SendKeys("{TAB}")
+              Start-Sleep -Milliseconds 300
+              
+              # سیریل کی پیسٹ کی
+              $wshell.SendKeys($serialKey)
+              Start-Sleep -Milliseconds 500
+              
+              # 4th Tab -> Register بٹن پر گیا
+              $wshell.SendKeys("{TAB}")
+              Start-Sleep -Milliseconds 300
+              
+              # Enter دبا کر رجسٹر کیا
+              $wshell.SendKeys("{ENTER}")
+              Start-Sleep -Milliseconds 500
+
+              # ایک بار پھر Tab اور Enter دبا کر کنفرم کیا
+              $wshell.SendKeys("{TAB}")
+              Start-Sleep -Milliseconds 300
+              $wshell.SendKeys("{ENTER}")
+
+              Write-Host "Activation steps completed successfully!"
+          } else {
+              Write-Host "Warning: Could not extract serial key, skipping auto-activation."
           }
 
       - name: Install Tailscale
