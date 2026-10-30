@@ -99,31 +99,25 @@ jobs:
               Start-Process -FilePath $installerPath -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/quiet", "/NORESTART" -Wait
               Write-Host "Macro Recorder Setup Installed Successfully!"
           } else {
-              $macroSetup = Get-ChildItem -Path $extractPath -Filter "*Macro*Recorder*.exe" | Select-Object -First 1
-              if ($macroSetup) {
-                  Start-Process -FilePath $macroSetup.FullName -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/quiet", "/NORESTART" -Wait
-              }
+              Write-Error "Installer not found!"
           }
 
-          # 2. میکرو ریکارڈر کو سکرین کے سامنے (Foreground) اوپن کرنا اور کھڑا رہنے دینا
+          # 2. میکرو ریکارڈر کو اصل پاتھ سے سکرین کے سامنے (Foreground) اوپن کرنا
           Write-Host "Opening Macro Recorder normally in foreground..."
           $macroPath = "C:\Program Files (x86)\MacroRecorder\MacroRecorder.exe"
-          if (-not (Test-Path $macroPath)) {
-              $macroPath = "C:\Program Files\MacroRecorder\MacroRecorder.exe"
-          }
           
           if (Test-Path $macroPath) {
-              # اسے نارمل طریقے سے سٹارٹ کیا اور بیک گراؤنڈ پر نہیں ڈالا
               Start-Process -FilePath $macroPath
-              Write-Host "Waiting for UI and popup to load completely..."
-              Start-Sleep -Seconds 8
+              Write-Host "Macro Recorder is now open. Waiting 10 seconds for UI and popup to load completely..."
+              Start-Sleep -Seconds 10
+          } else {
+              Write-Error "Macro Recorder exe not found at $macroPath"
           }
 
-          # 3. رجسٹری ایڈیٹر والی لوکیشن پر جا کر نیو فائلز بنانا (بغیر کسی کی بورڈ آٹومیشن کے)
+          # 3. رجسٹری ایڈیٹر والی لوکیشن پر جا کر نیو فائلز بنانا
           Write-Host "Going to Registry Editor path to create String (REG_SZ) files..."
           $regPath = "HKCU:\SOFTWARE\Jitbit\Macro Recorder"
           
-          # اگر فولڈر نظر نہ آئے تو اسے فورس کر کے بنا دے گا
           if (-not (Test-Path $regPath)) {
               New-Item -Path $regPath -Force | Out-Null
           }
