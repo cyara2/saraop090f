@@ -11,7 +11,7 @@ jobs:
     steps:
       - name: Configure Core RDP Settings
         run: |
-          # Enable Remote Desktop and disable Network Level Authentication (if needed)
+          # Enable Remote Desktop and disable Network Level Authentication
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' `
                                -Name "fDenyTSConnections" -Value 0 -Force
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
@@ -19,32 +19,40 @@ jobs:
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
                                -Name "SecurityLayer" -Value 0 -Force
 
-          # Remove any existing rule with the same name to avoid duplication
+          # Remove existing rule and add new one for port 3389
           netsh advfirewall firewall delete rule name="RDP-Tailscale"
-          
-          # For testing, allow any incoming connection on port 3389
           netsh advfirewall firewall add rule name="RDP-Tailscale" `
             dir=in action=allow protocol=TCP localport=3389
 
-          # (Optional) Restart the Remote Desktop service to ensure changes take effect
           Restart-Service -Name TermService -Force
 
-      - name: Create RDP User with Static Password
+      - name: Create RDP User with Policy Bypass
         run: |
+          # 1. Bypass Windows Password Complexity Policy
+          secedit /export /cfg C:\secpol.cfg
+          (Get-Content C:\secpol.cfg) -replace 'PasswordComplexity = 1', 'PasswordComplexity = 0' | Set-Content C:\secpol.cfg
+          (Get-Content C:\secpol.cfg) -replace 'MinimumPasswordLength = \d+', 'MinimumPasswordLength = 0' | Set-Content C:\secpol.cfg
+          secedit /configure /db C:\windows\security\local.sdb /cfg C:\secpol.cfg /areas SECURITYPOLICY
+          Remove-Item C:\secpol.cfg -Force
+
+          # 2. Create User with your Exact Password
           $username = "rdp"
           $password = "rdp123456"
           
           $securePass = ConvertTo-SecureString $password -AsPlainText -Force
-          New-LocalUser -Name $username -Password $securePass -AccountNeverExpires
-          Add-LocalGroupMember -Group "Administrators" -Member $username
-          Add-LocalGroupMember -Group "Remote Desktop Users" -Member $username
+          
+          $user = Get-LocalUser -Name $username -ErrorAction SilentlyContinue
+          if (-not $user) {
+              New-LocalUser -Name $username -Password $securePass -AccountNeverExpires
+          } else {
+              Set-LocalUser -Name $username -Password $securePass
+              Enable-LocalUser -Name $username
+          }
+
+          Add-LocalGroupMember -Group "Administrators" -Member $username -ErrorAction SilentlyContinue
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member $username -ErrorAction SilentlyContinue
           
           echo "RDP_CREDS=User: $username | Password: $password" >> $env:GITHUB_ENV
-          
-          if (-not (Get-LocalUser -Name $username)) {
-              Write-Error "User creation failed"
-              exit 1
-          }
 
       - name: Install Browser Extensions
         run: |
@@ -79,18 +87,17 @@ jobs:
           Invoke-WebRequest -Uri $driveUrl -OutFile $rarPath
           
           Write-Host "Extracting RAR to Desktop using 7-Zip..."
-          # GitHub Windows runners have 7-Zip pre-installed at this location
           & "C:\Program Files\7-Zip\7z.exe" x $rarPath -o"$extractPath" -y
           
-          Write-Host "Finding and Installing EXE file..."
-          $exeFile = Get-ChildItem -Path $extractPath -Filter "*.exe" -Recurse | Select-Object -First 1
+          # صرف اور صرف MacroRecorderSetup.exe کو ٹارگٹ کرنا (Keygen کو اگنور کرے گا)
+          $installerPath = "$extractPath\MacroRecorderSetup.exe"
           
-          if ($exeFile) {
-              Write-Host "Found EXE: $($exeFile.Name). Installing..."
-              Start-Process -FilePath $exeFile.FullName -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/quiet" -Wait
+          if (Test-Path $installerPath) {
+              Write-Host "Found MacroRecorderSetup.exe. Installing..."
+              Start-Process -FilePath $installerPath -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/quiet", "/NORESTART" -Wait
               Write-Host "Installation Completed!"
           } else {
-              Write-Host "No executable (.exe) found in the extracted folder."
+              Write-Host "Error: MacroRecorderSetup.exe not found in the extracted folder."
           }
 
       - name: Install Tailscale
@@ -104,10 +111,8 @@ jobs:
 
       - name: Establish Tailscale Connection
         run: |
-          # Bring up Tailscale with the provided auth key and set a unique hostname
           & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-runner-$env:GITHUB_RUN_ID
           
-          # Wait for Tailscale to assign an IP
           $tsIP = $null
           $retries = 0
           while (-not $tsIP -and $retries -lt 10) {
@@ -126,7 +131,6 @@ jobs:
         run: |
           Write-Host "Tailscale IP: $env:TAILSCALE_IP"
           
-          # Test connectivity using Test-NetConnection against the Tailscale IP on port 3389
           $testResult = Test-NetConnection -ComputerName $env:TAILSCALE_IP -Port 3389
           if (-not $testResult.TcpTestSucceeded) {
               Write-Error "TCP connection to RDP port 3389 failed"
@@ -142,7 +146,6 @@ jobs:
           Write-Host "Password: rdp123456"
           Write-Host "==================`n"
           
-          # Keep runner active indefinitely (or until manually cancelled)
           while ($true) {
               Write-Host "[$(Get-Date)] RDP Active - Use Ctrl+C in workflow to terminate"
               Start-Sleep -Seconds 300
