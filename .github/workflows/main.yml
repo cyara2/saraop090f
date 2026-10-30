@@ -2,90 +2,96 @@ name: RDP
 
 on:
   workflow_dispatch:
-    inputs:
-      ts_hostname:
-        description: "Tailscale Hostname (e.g., ahmad1, ahmad2)"
-        required: true
-        default: "ahmad1"
-
-permissions: write-all
 
 jobs:
   secure-rdp:
     runs-on: windows-latest
-    timeout-minutes: 360
+    timeout-minutes: 3600
 
     steps:
       - name: Configure Core RDP Settings
         run: |
+          # Enable Remote Desktop and disable Network Level Authentication (if needed)
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' `
-                           -Name "fDenyTSConnections" -Value 0 -Force
+                               -Name "fDenyTSConnections" -Value 0 -Force
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
-                           -Name "UserAuthentication" -Value 0 -Force
+                               -Name "UserAuthentication" -Value 0 -Force
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
-                           -Name "SecurityLayer" -Value 0 -Force
+                               -Name "SecurityLayer" -Value 0 -Force
 
+          # Remove any existing rule with the same name to avoid duplication
           netsh advfirewall firewall delete rule name="RDP-Tailscale"
           
+          # For testing, allow any incoming connection on port 3389
           netsh advfirewall firewall add rule name="RDP-Tailscale" `
             dir=in action=allow protocol=TCP localport=3389
 
+          # (Optional) Restart the Remote Desktop service to ensure changes take effect
           Restart-Service -Name TermService -Force
 
-      - name: Create RDP User with Policy Bypass
+      - name: Create RDP User with Static Password
         run: |
-          secedit /export /cfg C:\secpol.cfg
-          (Get-Content C:\secpol.cfg) -replace 'PasswordComplexity = 1', 'PasswordComplexity = 0' | Set-Content C:\secpol.cfg
-          (Get-Content C:\secpol.cfg) -replace 'MinimumPasswordLength = \d+', 'MinimumPasswordLength = 0' | Set-Content C:\secpol.cfg
-          secedit /configure /db C:\windows\security\local.sdb /cfg C:\secpol.cfg /areas SECURITYPOLICY
-          Remove-Item C:\secpol.cfg -Force
-
-          $securePass = ConvertTo-SecureString "rdp123456" -AsPlainText -Force
+          $username = "rdp"
+          $password = "rdp123456"
           
-          $user = Get-LocalUser -Name "rdp" -ErrorAction SilentlyContinue
-          if (-not $user) {
-              New-LocalUser -Name "rdp" -Password $securePass -AccountNeverExpires
-          } else {
-              Set-LocalUser -Name "rdp" -Password $securePass
-              Enable-LocalUser -Name "rdp"
+          $securePass = ConvertTo-SecureString $password -AsPlainText -Force
+          New-LocalUser -Name $username -Password $securePass -AccountNeverExpires
+          Add-LocalGroupMember -Group "Administrators" -Member $username
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member $username
+          
+          echo "RDP_CREDS=User: $username | Password: $password" >> $env:GITHUB_ENV
+          
+          if (-not (Get-LocalUser -Name $username)) {
+              Write-Error "User creation failed"
+              exit 1
           }
 
-          Add-LocalGroupMember -Group "Administrators" -Member "rdp" -ErrorAction SilentlyContinue
-          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "rdp" -ErrorAction SilentlyContinue
-
-      - name: Download File, Extract & Install Automation Tools
-        shell: pwsh
+      - name: Install Browser Extensions
         run: |
-          Write-Host "Installing gdown..."
-          pip install gdown -q
-          Set-Location -Path "C:\Users\Public\Desktop"
-          Write-Host "Downloading file from Google Drive..."
-          gdown "https://drive.google.com/uc?id=1WgcAipfuH2bgC1tnsB7VtOTdf9qTq-1H"
+          # Chrome Extensions Configuration
+          $chromePath = "HKLM:\SOFTWARE\Policies\Google\Chrome\ExtensionInstallForcelist"
+          if (-not (Test-Path $chromePath)) {
+              New-Item -Path $chromePath -Force | Out-Null
+          }
+          # 1. Clear Data for Current Site
+          New-ItemProperty -Path $chromePath -Name "1" -Value "lfkgcfakbpblpflbjanpoaipofoodnen;https://clients2.google.com/service/update2/crx" -PropertyType String -Force | Out-Null
+          # 2. Free VPN for Chrome - VPN Proxy VeePN
+          New-ItemProperty -Path $chromePath -Name "2" -Value "majdfhpaihoncoakbjgbdhglocklcgno;https://clients2.google.com/service/update2/crx" -PropertyType String -Force | Out-Null
           
-          $archives = Get-ChildItem -Path "C:\Users\Public\Desktop" | Where-Object { $_.Extension -match "\.(zip|rar)$" }
-          foreach ($archive in $archives) {
-              Write-Host "Extracting $($archive.Name)..."
-              7z x "$($archive.FullName)" -o"C:\Users\Public\Desktop" -y
-              Write-Host "Extracted successfully!"
+          # Edge Extensions Configuration
+          $edgePath = "HKLM:\SOFTWARE\Policies\Microsoft\Edge\ExtensionInstallForcelist"
+          if (-not (Test-Path $edgePath)) {
+              New-Item -Path $edgePath -Force | Out-Null
           }
+          # 1. AdBlocker Ultimate
+          New-ItemProperty -Path $edgePath -Name "1" -Value "pciakllldcajllepkbbihkmfkikheffb;https://edge.microsoft.com/extensionwebstorebase/v1/crx" -PropertyType String -Force | Out-Null
 
-          Write-Host "Installing Macro Recorder..."
-          $macroSetup = Get-ChildItem -Path "C:\Users\Public\Desktop" -Filter "*Macro*Recorder*.exe" -Recurse | Select-Object -First 1
-          if ($macroSetup) {
-              Start-Process -FilePath $macroSetup.FullName -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-", "/S", "/quiet" -NoNewWindow
-              Write-Host "Macro Recorder Installed!"
+          Write-Host "Chrome and Edge extensions configured successfully!"
+
+      - name: Download & Install Macro Recorder (RAR)
+        run: |
+          $driveUrl = "https://drive.usercontent.google.com/download?id=1Xyc1poyqtrf-r3ic0E75qEtHWoVUfhQ6&export=download&authuser=0"
+          $desktopPath = "C:\Users\Public\Desktop"
+          $rarPath = "$desktopPath\MacroRecorder.rar"
+          $extractPath = "$desktopPath\MacroRecorder_Setup"
+          
+          Write-Host "Downloading RAR file from Google Drive..."
+          Invoke-WebRequest -Uri $driveUrl -OutFile $rarPath
+          
+          Write-Host "Extracting RAR to Desktop using 7-Zip..."
+          # GitHub Windows runners have 7-Zip pre-installed at this location
+          & "C:\Program Files\7-Zip\7z.exe" x $rarPath -o"$extractPath" -y
+          
+          Write-Host "Finding and Installing EXE file..."
+          $exeFile = Get-ChildItem -Path $extractPath -Filter "*.exe" -Recurse | Select-Object -First 1
+          
+          if ($exeFile) {
+              Write-Host "Found EXE: $($exeFile.Name). Installing..."
+              Start-Process -FilePath $exeFile.FullName -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/quiet" -Wait
+              Write-Host "Installation Completed!"
           } else {
-              $exeFiles = Get-ChildItem -Path "C:\Users\Public\Desktop" -Filter "*.exe" -Recurse
-              foreach ($exe in $exeFiles) {
-                  Start-Process -FilePath $exe.FullName -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-", "/S", "/quiet" -NoNewWindow
-              }
+              Write-Host "No executable (.exe) found in the extracted folder."
           }
-
-          # 1. Google Chrome Extensions Setup Only
-          $chromePolicyPath = "HKLM:\Software\Policies\Google\Chrome\ExtensionInstallForcelist"
-          if (!(Test-Path $chromePolicyPath)) { New-Item -Path $chromePolicyPath -Force | Out-Null }
-          New-ItemProperty -Path $chromePolicyPath -Name "1" -Value "majdfhpaihoncoakbjgbdhglocklcgno;https://clients2.google.com/service/update2/crx" -PropertyType String -Force | Out-Null
-          New-ItemProperty -Path $chromePolicyPath -Name "2" -Value "lfkgcfakbpblpflbjanpoaipofoodnen;https://clients2.google.com/service/update2/crx" -PropertyType String -Force | Out-Null
 
       - name: Install Tailscale
         run: |
@@ -98,9 +104,10 @@ jobs:
 
       - name: Establish Tailscale Connection
         run: |
-          # Uses the custom hostname provided when running the workflow
-          & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=${{ github.event.inputs.ts_hostname }} --accept-routes
+          # Bring up Tailscale with the provided auth key and set a unique hostname
+          & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-runner-$env:GITHUB_RUN_ID
           
+          # Wait for Tailscale to assign an IP
           $tsIP = $null
           $retries = 0
           while (-not $tsIP -and $retries -lt 10) {
@@ -114,27 +121,29 @@ jobs:
               exit 1
           }
           echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
-
+      
       - name: Verify RDP Accessibility
         run: |
-          Write-Host "$env:TAILSCALE_IP"
+          Write-Host "Tailscale IP: $env:TAILSCALE_IP"
+          
+          # Test connectivity using Test-NetConnection against the Tailscale IP on port 3389
           $testResult = Test-NetConnection -ComputerName $env:TAILSCALE_IP -Port 3389
           if (-not $testResult.TcpTestSucceeded) {
               Write-Error "TCP connection to RDP port 3389 failed"
               exit 1
           }
+          Write-Host "TCP connectivity successful!"
 
       - name: Maintain Connection
         run: |
-          Write-Host "`n=================="
-          Write-Host "Tailscale IP: $env:TAILSCALE_IP"
-          Write-Host "Hostname: ${{ github.event.inputs.ts_hostname }}"
+          Write-Host "`n=== RDP ACCESS ==="
+          Write-Host "Address: $env:TAILSCALE_IP"
           Write-Host "Username: rdp"
           Write-Host "Password: rdp123456"
           Write-Host "==================`n"
           
-          # Wait 5 Hours 55 Minutes (355 minutes = 71 iterations of 5 minutes)
-          for ($i = 0; $i -lt 71; $i++) {
-              Write-Host "[$(Get-Date)] RDP Active"
+          # Keep runner active indefinitely (or until manually cancelled)
+          while ($true) {
+              Write-Host "[$(Get-Date)] RDP Active - Use Ctrl+C in workflow to terminate"
               Start-Sleep -Seconds 300
           }
