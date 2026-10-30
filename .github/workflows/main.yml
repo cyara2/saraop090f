@@ -26,28 +26,23 @@ jobs:
 
           Restart-Service -Name TermService -Force
 
-      - name: Create RDP User with Policy Bypass
+      - name: Set Password for Main GitHub User (runneradmin)
         run: |
+          # سیکورٹی پالیسی بائی پاس
           secedit /export /cfg C:\secpol.cfg
           (Get-Content C:\secpol.cfg) -replace 'PasswordComplexity = 1', 'PasswordComplexity = 0' | Set-Content C:\secpol.cfg
           (Get-Content C:\secpol.cfg) -replace 'MinimumPasswordLength = \d+', 'MinimumPasswordLength = 0' | Set-Content C:\secpol.cfg
           secedit /configure /db C:\windows\security\local.sdb /cfg C:\secpol.cfg /areas SECURITYPOLICY
           Remove-Item C:\secpol.cfg -Force
 
-          $username = "rdp"
+          # گٹ ہب کے مین یوزر کا پاسورڈ سیٹ کرنا
+          $username = "runneradmin"
           $password = "rdp123456"
           
           $securePass = ConvertTo-SecureString $password -AsPlainText -Force
+          Set-LocalUser -Name $username -Password $securePass
           
-          $user = Get-LocalUser -Name $username -ErrorAction SilentlyContinue
-          if (-not $user) {
-              New-LocalUser -Name $username -Password $securePass -AccountNeverExpires
-          } else {
-              Set-LocalUser -Name $username -Password $securePass
-              Enable-LocalUser -Name $username
-          }
-
-          Add-LocalGroupMember -Group "Administrators" -Member $username -ErrorAction SilentlyContinue
+          # اسے RDP کی اجازت دینا
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member $username -ErrorAction SilentlyContinue
           
           echo "RDP_CREDS=User: $username | Password: $password" >> $env:GITHUB_ENV
@@ -69,9 +64,7 @@ jobs:
           }
           New-ItemProperty -Path $edgePath -Name "1" -Value "pciakllldcajllepkbbihkmfkikheffb;https://edge.microsoft.com/extensionwebstorebase/v1/crx" -PropertyType String -Force | Out-Null
 
-          Write-Host "Chrome and Edge extensions configured successfully!"
-
-      - name: Download, Install, Open UI & Create Registry Files
+      - name: Install Macro Recorder & Direct Registry Activation
         shell: pwsh
         run: |
           $desktopPath = "C:\Users\Public\Desktop"
@@ -80,42 +73,21 @@ jobs:
           
           $directUrl = "https://drive.usercontent.google.com/download?id=1cf_pdTQNsD8WmYiM53uUEJh4QGpNXAxa&export=download&authuser=0"
           
-          Write-Host "Downloading file directly from Google Drive..."
+          Write-Host "Downloading Macro Recorder..."
           Invoke-WebRequest -Uri $directUrl -OutFile $rarPath
           
-          Write-Host "Extracting archive using 7-Zip..."
           if (Test-Path $rarPath) {
               & "C:\Program Files\7-Zip\7z.exe" x $rarPath -o"$extractPath" -y
-              Write-Host "Extracted successfully!"
-          } else {
-              Write-Error "Archive file not found!"
-              exit 1
           }
-
-          # 1. MacroRecorderSetup.exe انسٹال کرنا
-          Write-Host "Installing MacroRecorderSetup.exe..."
+          
+          Write-Host "Installing Setup..."
           $installerPath = "$extractPath\MacroRecorderSetup.exe"
           if (Test-Path $installerPath) {
               Start-Process -FilePath $installerPath -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/quiet", "/NORESTART" -Wait
-              Write-Host "Macro Recorder Setup Installed Successfully!"
-          } else {
-              Write-Error "Installer not found!"
           }
 
-          # 2. میکرو ریکارڈر کو اصل پاتھ سے سکرین کے سامنے (Foreground) اوپن کرنا
-          Write-Host "Opening Macro Recorder normally in foreground..."
-          $macroPath = "C:\Program Files (x86)\MacroRecorder\MacroRecorder.exe"
-          
-          if (Test-Path $macroPath) {
-              Start-Process -FilePath $macroPath
-              Write-Host "Macro Recorder is now open. Waiting 10 seconds for UI and popup to load completely..."
-              Start-Sleep -Seconds 10
-          } else {
-              Write-Error "Macro Recorder exe not found at $macroPath"
-          }
-
-          # 3. رجسٹری ایڈیٹر والی لوکیشن پر جا کر نیو فائلز بنانا
-          Write-Host "Going to Registry Editor path to create String (REG_SZ) files..."
+          # رجسٹری میں زبردستی فولڈر بنانا اور کیز سیو کرنا
+          Write-Host "Forcing Registry Folder Creation and Injecting Keys..."
           $regPath = "HKCU:\SOFTWARE\Jitbit\Macro Recorder"
           
           if (-not (Test-Path $regPath)) {
@@ -124,13 +96,10 @@ jobs:
           
           $serialKey = "HGCNNGujba4SdhQELI56YkubWcJe4MMhOw6mrqdA3WdWKp63lGmQgQSw"
           
-          # Email والی سٹرنگ فائل بنانا اور ویلیو 1 دینا
           New-ItemProperty -Path $regPath -Name "Email" -Value "1" -PropertyType String -Force | Out-Null
-          Write-Host "Created 'Email' string file in registry."
-          
-          # Code والی سٹرنگ فائل بنانا اور سیریل نمبر دینا
           New-ItemProperty -Path $regPath -Name "Code" -Value $serialKey -PropertyType String -Force | Out-Null
-          Write-Host "Created 'Code' string file in registry."
+          
+          Write-Host "Macro Recorder is now permanently registered for runneradmin!"
 
       - name: Install Tailscale
         run: |
@@ -173,7 +142,7 @@ jobs:
         run: |
           Write-Host "`n=== RDP ACCESS ==="
           Write-Host "Address: $env:TAILSCALE_IP"
-          Write-Host "Username: rdp"
+          Write-Host "Username: runneradmin"
           Write-Host "Password: rdp123456"
           Write-Host "==================`n"
           
