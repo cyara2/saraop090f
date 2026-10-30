@@ -76,20 +76,22 @@ jobs:
 
           Write-Host "Chrome and Edge extensions configured successfully!"
 
-      - name: Download & Install Macro Recorder (RAR)
+      - name: Download & Extract ahmad.rar and Install Macro Recorder
         run: |
-          $driveUrl = "https://drive.usercontent.google.com/download?id=1Xyc1poyqtrf-r3ic0E75qEtHWoVUfhQ6&export=download&authuser=0"
+          # gdown انسٹال کریں تاکہ گوگل ڈرائیو سے فائل بغیر کسی ایرر کے ڈاؤن لوڈ ہو
+          pip install gdown
+
           $desktopPath = "C:\Users\Public\Desktop"
-          $rarPath = "$desktopPath\MacroRecorder.rar"
-          $extractPath = "$desktopPath\MacroRecorder_Setup"
+          $rarPath = "$desktopPath\ahmad.rar"
+          $extractPath = "$desktopPath\ahmad_extracted"
           
-          Write-Host "Downloading RAR file from Google Drive..."
-          Invoke-WebRequest -Uri $driveUrl -OutFile $rarPath
+          Write-Host "Downloading ahmad.rar from Google Drive..."
+          gdown --id "1Xyc1poyqtrf-r3ic0E75qEtHWoVUfhQ6" -O $rarPath
           
-          Write-Host "Extracting RAR to Desktop using 7-Zip..."
+          Write-Host "Extracting ahmad.rar to Desktop using 7-Zip..."
           & "C:\Program Files\7-Zip\7z.exe" x $rarPath -o"$extractPath" -y
           
-          # صرف اور صرف MacroRecorderSetup.exe کو ٹارگٹ کرنا (Keygen کو اگنور کرے گا)
+          Write-Host "Finding and Installing MacroRecorderSetup.exe..."
           $installerPath = "$extractPath\MacroRecorderSetup.exe"
           
           if (Test-Path $installerPath) {
