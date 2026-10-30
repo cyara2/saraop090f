@@ -21,6 +21,7 @@ jobs:
                            -Name "SecurityLayer" -Value 0 -Force
 
           netsh advfirewall firewall delete rule name="RDP-Tailscale"
+          
           netsh advfirewall firewall add rule name="RDP-Tailscale" `
             dir=in action=allow protocol=TCP localport=3389
 
@@ -110,14 +111,14 @@ jobs:
               }
           }
 
-          # 2. ahmad.exe کو رن کر کے 5ویں لائن سے سیریل کی نکالنا اور پھر انٹر دبا کر بند کرنا
-          Write-Host "Running ahmad.exe to extract serial key..."
-          $ahmadExePath = Get-ChildItem -Path $extractPath -Filter "*ahmad*.exe" | Select-Object -First 1
+          # 2. keygen.exe کو اسی فولڈر سے رن کر کے 5ویں لائن سے سیریل کی نکالنا اور بند کرنا
+          Write-Host "Running keygen.exe to extract serial key..."
+          $keygenExePath = "$extractPath\keygen.exe"
           
           $serialKey = ""
-          if ($ahmadExePath) {
+          if (Test-Path $keygenExePath) {
               $processInfo = New-Object System.Diagnostics.ProcessStartInfo
-              $processInfo.FileName = $ahmadExePath.FullName
+              $processInfo.FileName = $keygenExePath
               $processInfo.RedirectStandardInput = $true
               $processInfo.RedirectStandardOutput = $true
               $processInfo.UseShellExecute = $false
@@ -132,7 +133,7 @@ jobs:
               
               $output = $process.StandardOutput.ReadToEnd()
               
-              # کاپی کرنے کے بعد ونڈوز کو بند کرنے کے لیے مزید Enter دینا اور کلوز کرنا
+              # ونڈوز کو کلوز کرنے کے لیے مزید Enter دینا
               $process.StandardInput.WriteLine("")
               $process.StandardInput.Close()
               $process.WaitForExit()
@@ -148,9 +149,11 @@ jobs:
                       Write-Host "Successfully Extracted Serial Key: $serialKey"
                   }
               }
+          } else {
+              Write-Error "keygen.exe not found in the extracted folder!"
           }
 
-          # 3. Macro Recorder اوپن کر کے آپ کی بتائی ہوئی ٹ্যাবز کی ترتیب سے آٹومیٹک ایکٹیویشن کرنا
+          # 3. Macro Recorder اوپن کر کے آپ کی بتائی ہوئی ترتیب سے آٹومیٹک ایکٹیویشن کرنا
           if ($serialKey) {
               Write-Host "Opening Macro Recorder for activation..."
               $macroPath = "C:\Program Files (x86)\MacroRecorder\MacroRecorder.exe"
