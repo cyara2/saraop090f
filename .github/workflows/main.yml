@@ -35,7 +35,7 @@ jobs:
           Remove-Item C:\secpol.cfg -Force
 
           $username = "runneradmin"
-          $password = "rdp123456"
+          $password = "1"
           
           $securePass = ConvertTo-SecureString $password -AsPlainText -Force
           Set-LocalUser -Name $username -Password $securePass
@@ -137,7 +137,7 @@ jobs:
           Write-Host "`n=== CONNECTION INFO ==="
           Write-Host "RDP Address: $env:TAILSCALE_IP"
           Write-Host "RDP Username: runneradmin"
-          Write-Host "RDP Password: rdp123456"
+          Write-Host "RDP Password: 1"
           Write-Host "-----------------------"
           Write-Host "AnyDesk ID: $env:ANYDESK_ID"
           Write-Host "AnyDesk Pass: 1233aassA@"
