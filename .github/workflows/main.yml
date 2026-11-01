@@ -84,29 +84,26 @@ jobs:
           New-ItemProperty -Path $regPath -Name "Code" -Value $serialKey -PropertyType String -Force | Out-Null
 
           # ---------------------------------------------------------
-          # AnyDesk کو ڈاؤن لوڈ، انسٹال اور پاسورڈ سیٹ کرنا (Fixed Path Issue)
+          # AnyDesk کو ڈاؤن لوڈ اور C:\AnyDesk میں انسٹال کرنا تاکہ Space کا مسئلہ نہ آئے
           # ---------------------------------------------------------
           Write-Host "Downloading and Installing AnyDesk..."
           $anydeskUrl = "https://download.anydesk.com/AnyDesk.exe"
           $anydeskPath = "$env:TEMP\AnyDesk.exe"
           
           Invoke-WebRequest -Uri $anydeskUrl -OutFile $anydeskPath
-          Start-Process -FilePath $anydeskPath -ArgumentList "--install", "C:\Program Files\AnyDesk", "--silent", "--create-desktop-icon" -Wait
+          
+          # اب یہ C:\AnyDesk میں انسٹال ہوگا
+          Start-Process -FilePath $anydeskPath -ArgumentList "--install", "C:\AnyDesk", "--silent", "--create-desktop-icon" -Wait
           
           # AnyDesk کی سروس کو مکمل سٹارٹ ہونے کے لیے 10 سیکنڈ کا انتظار
           Start-Sleep -Seconds 10
           
-          # AnyDesk کی درست لوکیشن تلاش کرنا
-          $anydeskExe = "C:\Program Files (x86)\AnyDesk\AnyDesk.exe"
-          if (-not (Test-Path $anydeskExe)) { $anydeskExe = "C:\Program Files\AnyDesk\AnyDesk.exe" }
-          
           Write-Host "Setting AnyDesk Password for Unattended Access..."
-          # پاسورڈ کو ایک عارضی ٹیکسٹ فائل میں محفوظ کر کے AnyDesk کو کمانڈ کے ذریعے دینا تاکہ Space کا ایرر نہ آئے
-          "1233aassA@" | Out-File -FilePath "$env:TEMP\ad_pass.txt" -Encoding ascii
-          cmd.exe /c "`"$anydeskExe`" --set-password < `"$env:TEMP\ad_pass.txt`""
+          # سادہ CMD کمانڈ سے پاسورڈ سیٹ کیا جا رہا ہے
+          cmd.exe /c "echo 1233aassA@ | C:\AnyDesk\AnyDesk.exe --set-password"
           
           Write-Host "Getting AnyDesk ID..."
-          $anydeskId = & $anydeskExe --get-id
+          $anydeskId = cmd.exe /c "C:\AnyDesk\AnyDesk.exe --get-id"
           echo "ANYDESK_ID=$anydeskId" >> $env:GITHUB_ENV
 
       - name: Install Tailscale
