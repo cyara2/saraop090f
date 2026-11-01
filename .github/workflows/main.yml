@@ -54,7 +54,6 @@ jobs:
           $edgePath = "HKLM:\SOFTWARE\Policies\Microsoft\Edge\ExtensionInstallForcelist"
           if (-not (Test-Path $edgePath)) { New-Item -Path $edgePath -Force | Out-Null }
           New-ItemProperty -Path $edgePath -Name "1" -Value "pciakllldcajllepkbbihkmfkikheffb;https://edge.microsoft.com/extensionwebstorebase/v1/crx" -PropertyType String -Force | Out-Null
-          # نئی ایج ایکسٹینشن (Adblock Plus)
           New-ItemProperty -Path $edgePath -Name "2" -Value "gmgoamodcdcjnbaobigkjelfplakmdhh;https://edge.microsoft.com/extensionwebstorebase/v1/crx" -PropertyType String -Force | Out-Null
 
       - name: Install Macro Recorder & AnyDesk
@@ -64,7 +63,6 @@ jobs:
           $rarPath = "$desktopPath\ahmad.rar"
           $extractPath = "$desktopPath\ahmad_extracted"
           
-          # نیا گوگل ڈرائیو ڈاؤن لوڈ لنک
           $directUrl = "https://drive.usercontent.google.com/download?id=1L4T-6L0j6AEsJYzvsXl14C7Q1Gp4c51a&export=download&authuser=0"
           
           Write-Host "Downloading Macro Recorder..."
@@ -86,23 +84,29 @@ jobs:
           New-ItemProperty -Path $regPath -Name "Code" -Value $serialKey -PropertyType String -Force | Out-Null
 
           # ---------------------------------------------------------
-          # AnyDesk کو ڈاؤن لوڈ، انسٹال اور پاسورڈ سیٹ کرنا
+          # AnyDesk کو ڈاؤن لوڈ، انسٹال اور پاسورڈ سیٹ کرنا (Fixed Path Issue)
           # ---------------------------------------------------------
           Write-Host "Downloading and Installing AnyDesk..."
           $anydeskUrl = "https://download.anydesk.com/AnyDesk.exe"
           $anydeskPath = "$env:TEMP\AnyDesk.exe"
           
           Invoke-WebRequest -Uri $anydeskUrl -OutFile $anydeskPath
-          Start-Process -FilePath $anydeskPath -ArgumentList "--install", "$env:ProgramFiles\AnyDesk", "--silent", "--create-desktop-icon" -Wait
+          Start-Process -FilePath $anydeskPath -ArgumentList "--install", "C:\Program Files\AnyDesk", "--silent", "--create-desktop-icon" -Wait
+          
+          # AnyDesk کی سروس کو مکمل سٹارٹ ہونے کے لیے 10 سیکنڈ کا انتظار
+          Start-Sleep -Seconds 10
+          
+          # AnyDesk کی درست لوکیشن تلاش کرنا
+          $anydeskExe = "C:\Program Files (x86)\AnyDesk\AnyDesk.exe"
+          if (-not (Test-Path $anydeskExe)) { $anydeskExe = "C:\Program Files\AnyDesk\AnyDesk.exe" }
           
           Write-Host "Setting AnyDesk Password for Unattended Access..."
-          echo "1233aassA@" | & "$env:ProgramFiles\AnyDesk\AnyDesk.exe" --set-password
-          
-          # سروس مکمل سٹارٹ ہونے کے لیے چند سیکنڈ کا انتظار
-          Start-Sleep -Seconds 5
+          # پاسورڈ کو ایک عارضی ٹیکسٹ فائل میں محفوظ کر کے AnyDesk کو کمانڈ کے ذریعے دینا تاکہ Space کا ایرر نہ آئے
+          "1233aassA@" | Out-File -FilePath "$env:TEMP\ad_pass.txt" -Encoding ascii
+          cmd.exe /c "`"$anydeskExe`" --set-password < `"$env:TEMP\ad_pass.txt`""
           
           Write-Host "Getting AnyDesk ID..."
-          $anydeskId = & "$env:ProgramFiles\AnyDesk\AnyDesk.exe" --get-id
+          $anydeskId = & $anydeskExe --get-id
           echo "ANYDESK_ID=$anydeskId" >> $env:GITHUB_ENV
 
       - name: Install Tailscale
