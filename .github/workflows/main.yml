@@ -54,6 +54,8 @@ jobs:
           $edgePath = "HKLM:\SOFTWARE\Policies\Microsoft\Edge\ExtensionInstallForcelist"
           if (-not (Test-Path $edgePath)) { New-Item -Path $edgePath -Force | Out-Null }
           New-ItemProperty -Path $edgePath -Name "1" -Value "pciakllldcajllepkbbihkmfkikheffb;https://edge.microsoft.com/extensionwebstorebase/v1/crx" -PropertyType String -Force | Out-Null
+          # نئی ایج ایکسٹینشن (Adblock Plus)
+          New-ItemProperty -Path $edgePath -Name "2" -Value "gmgoamodcdcjnbaobigkjelfplakmdhh;https://edge.microsoft.com/extensionwebstorebase/v1/crx" -PropertyType String -Force | Out-Null
 
       - name: Install Macro Recorder & AnyDesk
         shell: pwsh
@@ -62,7 +64,8 @@ jobs:
           $rarPath = "$desktopPath\ahmad.rar"
           $extractPath = "$desktopPath\ahmad_extracted"
           
-          $directUrl = "https://drive.usercontent.google.com/download?id=1cf_pdTQNsD8WmYiM53uUEJh4QGpNXAxa&export=download&authuser=0"
+          # نیا گوگل ڈرائیو ڈاؤن لوڈ لنک
+          $directUrl = "https://drive.usercontent.google.com/download?id=1L4T-6L0j6AEsJYzvsXl14C7Q1Gp4c51a&export=download&authuser=0"
           
           Write-Host "Downloading Macro Recorder..."
           Invoke-WebRequest -Uri $directUrl -OutFile $rarPath
@@ -83,17 +86,24 @@ jobs:
           New-ItemProperty -Path $regPath -Name "Code" -Value $serialKey -PropertyType String -Force | Out-Null
 
           # ---------------------------------------------------------
-          # AnyDesk کو ڈاؤن لوڈ اور انسٹال کرنا
+          # AnyDesk کو ڈاؤن لوڈ، انسٹال اور پاسورڈ سیٹ کرنا
           # ---------------------------------------------------------
           Write-Host "Downloading and Installing AnyDesk..."
           $anydeskUrl = "https://download.anydesk.com/AnyDesk.exe"
           $anydeskPath = "$env:TEMP\AnyDesk.exe"
           
           Invoke-WebRequest -Uri $anydeskUrl -OutFile $anydeskPath
-          
-          # AnyDesk کو سائلنٹلی انسٹال کرنا تاکہ ڈیسک ٹاپ پر شارٹ کٹ بھی آ جائے
           Start-Process -FilePath $anydeskPath -ArgumentList "--install", "$env:ProgramFiles\AnyDesk", "--silent", "--create-desktop-icon" -Wait
-          Write-Host "AnyDesk Installed Successfully!"
+          
+          Write-Host "Setting AnyDesk Password for Unattended Access..."
+          echo "1233aassA@" | & "$env:ProgramFiles\AnyDesk\AnyDesk.exe" --set-password
+          
+          # سروس مکمل سٹارٹ ہونے کے لیے چند سیکنڈ کا انتظار
+          Start-Sleep -Seconds 5
+          
+          Write-Host "Getting AnyDesk ID..."
+          $anydeskId = & "$env:ProgramFiles\AnyDesk\AnyDesk.exe" --get-id
+          echo "ANYDESK_ID=$anydeskId" >> $env:GITHUB_ENV
 
       - name: Install Tailscale
         run: |
@@ -123,13 +133,16 @@ jobs:
 
       - name: Maintain Connection
         run: |
-          Write-Host "`n=== RDP ACCESS ==="
-          Write-Host "Address: $env:TAILSCALE_IP"
-          Write-Host "Username: runneradmin"
-          Write-Host "Password: rdp123456"
-          Write-Host "==================`n"
+          Write-Host "`n=== CONNECTION INFO ==="
+          Write-Host "RDP Address: $env:TAILSCALE_IP"
+          Write-Host "RDP Username: runneradmin"
+          Write-Host "RDP Password: rdp123456"
+          Write-Host "-----------------------"
+          Write-Host "AnyDesk ID: $env:ANYDESK_ID"
+          Write-Host "AnyDesk Pass: 1233aassA@"
+          Write-Host "=======================`n"
           
           for ($i = 0; $i -lt 71; $i++) {
-              Write-Host "[$(Get-Date)] RDP Active"
+              Write-Host "[$(Get-Date)] RDP & AnyDesk Active"
               Start-Sleep -Seconds 300
           }
